@@ -501,24 +501,6 @@ produces at the center, while remaining fully deterministic — the chosen
 hex is a pure function of ``(seed, config)``. All 68 engine integration
 tests and all 35 terrain tests pass together.
 
-## Files
-
-| File | Role |
-|---|---|
-| `sim/world/noise.py` | Deterministic Perlin + fBm + ridged multifractal |
-| `sim/world/worldgen/types.py` | Intermediate data classes per layer |
-| `sim/world/worldgen/elevation.py` | L1 — heightmap |
-| `sim/world/worldgen/sea.py` | L2 — ocean / coast mask |
-| `sim/world/worldgen/climate.py` | L3, L4 — temperature, precipitation |
-| `sim/world/worldgen/hydrology.py` | L5 — sink-fill + flow + rivers + lakes |
-| `sim/world/worldgen/biome.py` | L6 — Whittaker + overrides |
-| `sim/world/worldgen/resources.py` | L7 — crop suitability + resource deposits |
-| `sim/world/worldgen/pipeline.py` | Orchestrator |
-| `sim/world/worldgen/config_loader.py` | Shared `WorldgenConfig` TOML parser |
-| `sim/world/worldgen/preview.py` | Standalone Pillow renderer (no engine import) |
-| `sim/world/generator.py` | Thin adapter → `HexGrid` for the engine |
-| `tests/worldgen/` | 49 tests, engine-independent |
-
 ## References
 
 ### Noise and procedural elevation
