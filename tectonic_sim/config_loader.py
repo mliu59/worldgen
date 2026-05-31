@@ -92,8 +92,10 @@ _REQUIRED_KEYS: tuple[str, ...] = (
     "voronoi_weight_sigma",
     "voronoi_weight_scale_km",
     "init_thickness_per_plate_sigma",
-    "init_thickness_noise_amplitude_frac",
-    "init_thickness_noise_sigma_cells",
+    "continental_relief_amplitude_km",
+    "continental_relief_wavelength_km",
+    "continental_relief_octaves",
+    "continental_relief_persistence",
 )
 
 
@@ -252,10 +254,16 @@ def load_sim_config(table: dict[str, object]) -> SimConfig:
         init_thickness_per_plate_sigma=float(
             table["init_thickness_per_plate_sigma"]  # type: ignore[arg-type]
         ),
-        init_thickness_noise_amplitude_frac=float(
-            table["init_thickness_noise_amplitude_frac"]  # type: ignore[arg-type]
+        continental_relief_amplitude_km=float(
+            table["continental_relief_amplitude_km"]  # type: ignore[arg-type]
         ),
-        init_thickness_noise_sigma_cells=float(
-            table["init_thickness_noise_sigma_cells"]  # type: ignore[arg-type]
+        continental_relief_wavelength_km=float(
+            table["continental_relief_wavelength_km"]  # type: ignore[arg-type]
+        ),
+        continental_relief_octaves=int(
+            table["continental_relief_octaves"]  # type: ignore[arg-type]
+        ),
+        continental_relief_persistence=float(
+            table["continental_relief_persistence"]  # type: ignore[arg-type]
         ),
     )

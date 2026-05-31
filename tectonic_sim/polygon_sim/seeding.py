@@ -12,12 +12,14 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.ndimage import gaussian_filter
 
+from tectonic_sim.noise import PerlinNoise2D, fbm_grid
 from tectonic_sim.rng import RngStream
 from tectonic_sim.types import CRUST_CONTINENTAL, WorldRect, crust_type_code
 
 from tectonic_sim.polygon_sim.topology import _cell_centres, _grid_dims
 from tectonic_sim.polygon_sim.types import (
     PolygonPlate,
+    _CONTINENTAL_RELIEF_RNG_TAG,
     _ROT_RNG_TAG,
     _VELOCITY_RNG_TAG,
     _VORONOI_RNG_TAG)
@@ -226,34 +228,58 @@ def _initial_state(
         sim_config.continental_thickness_km,
         sim_config.oceanic_thickness_km).astype(np.float64)
 
-    # ----- Initial-thickness variation (per-plate baseline + per-cell noise).
-    # Per-plate multiplier: log-normal so it stays positive and is
-    # symmetric in log-space (1.2× and 1/1.2× equally likely).
+    # ----- Initial-thickness variation.
+    # Per-plate scalar multiplier: log-normal so it stays positive and is
+    # symmetric in log-space (1.2× and 1/1.2× equally likely). Knob for
+    # plate-to-plate "this continent is on average thicker than that one"
+    # variation.
     if sim_config.init_thickness_per_plate_sigma > 0.0:
         plate_thick_mult = np.exp(vor_rng.normal(
             0.0, sim_config.init_thickness_per_plate_sigma, n_plates))
         g_thick = g_thick * plate_thick_mult[g_owner_idx].reshape(gy, gx)
-    # Per-cell smoothed noise overlay: cell-scale roughness within each
-    # plate's territory. Amplitude scales with the cell's crust-type
-    # base thickness so continental cells get larger absolute kicks
-    # than oceanic ones.
-    if sim_config.init_thickness_noise_amplitude_frac > 0.0:
-        raw_t = vor_rng.standard_normal((gy, gx))
-        noise_t = gaussian_filter(
-            raw_t, sigma=sim_config.init_thickness_noise_sigma_cells, mode="wrap")
-        if noise_t.std() > 1e-9:
-            noise_t = noise_t / noise_t.std()
-        noise_km = np.where(
-            g_crust == CRUST_CONTINENTAL,
-            sim_config.init_thickness_noise_amplitude_frac
-            * sim_config.continental_thickness_km,
-            sim_config.init_thickness_noise_amplitude_frac
-            * sim_config.oceanic_thickness_km)
-        g_thick = g_thick + noise_t * noise_km
+    # Continental relief: Perlin fBm perturbation in physical km,
+    # applied only to continental cells, zero-mean per plate so total
+    # continental mass is preserved exactly. After sea-level sampling,
+    # the thin spots become shelves / inland seas / straits, the thick
+    # spots stand proud — producing the "ancient basement topography"
+    # that turns featureless plate interiors into varied continents.
+    #
+    # The noise lives on the same toroidal frame as the cell grid (cell
+    # centres in [-half_w, +half_w] km). Frequency is set in physical km
+    # — wavelength_km gives the lowest-octave wavelength.
+    if sim_config.continental_relief_amplitude_km > 0.0:
+        relief_rng = np.random.Generator(
+            np.random.PCG64(seed ^ _CONTINENTAL_RELIEF_RNG_TAG))
+        relief_noise = PerlinNoise2D.from_rng(relief_rng)
+        x_km_grid = cell_xy[:, 0].reshape(gy, gx)
+        y_km_grid = cell_xy[:, 1].reshape(gy, gx)
+        relief = fbm_grid(
+            relief_noise, x_km_grid, y_km_grid,
+            octaves=sim_config.continental_relief_octaves,
+            persistence=sim_config.continental_relief_persistence,
+            base_frequency=1.0 / sim_config.continental_relief_wavelength_km)
+        # Normalize to unit std so amplitude_km is a meaningful "typical
+        # perturbation" rather than a peak. fBm output is approximately
+        # in [-1, 1] but its std is octave-dependent (~0.3-0.5).
+        std = float(relief.std())
+        if std > 1e-9:
+            relief = relief / std
+        relief_km = sim_config.continental_relief_amplitude_km * relief
+        # Apply only to continental cells; zero elsewhere.
+        relief_km = np.where(
+            g_crust == CRUST_CONTINENTAL, relief_km, 0.0)
+        # Zero-mean per plate so total continental mass on each plate is
+        # unchanged (preserves isostasy invariants and keeps plate-by-plate
+        # average thickness anchored at continental_thickness_km).
+        for k in range(n_plates):
+            cont_mask = (g_owner == seed_pid[k]) & (g_crust == CRUST_CONTINENTAL)
+            if cont_mask.any():
+                relief_km[cont_mask] -= relief_km[cont_mask].mean()
+        g_thick = g_thick + relief_km
     # Clamp to a sane floor — no zero/negative thickness from extreme
-    # combined perturbations. min_continental_thickness_km doubles as
-    # the lower bound for both crust types here (oceanic 7 km × 0.7
-    # multiplier × 0.92 noise factor stays well above 1 km anyway).
+    # combined perturbations. Continental cells with deeply negative
+    # relief stay above this floor; their crust type is unchanged, so
+    # they just sit very thin and dip below sea level after isostasy.
     g_thick = np.maximum(g_thick, 1.0)
 
     # ----- Build per-plate state.

@@ -26,7 +26,9 @@ from tectonic_sim.polygon_sim.hotspots import (
     _initialize_hotspots)
 from tectonic_sim.polygon_sim.kinematics import _rotate_plates, _stamp_paint
 from tectonic_sim.polygon_sim.momentum import _apply_momentum_exchange
-from tectonic_sim.polygon_sim.polygons import _re_extract_polygons
+from tectonic_sim.polygon_sim.polygons import (
+    _build_polygons_for_render,
+    _mark_dead_small_plates)
 from tectonic_sim.polygon_sim.rifting import _rift_plate
 from tectonic_sim.polygon_sim.seeding import _initial_state
 from tectonic_sim.polygon_sim.topology import _cell_centres, _grid_dims
@@ -112,17 +114,17 @@ def simulate_rigid_polygon(
         n_alive = sum(1 for p in plates if p.alive)
         part = _build_partition_image(
             owner, "partition (cell-mask + edge boundaries)",
-            upscale=frame_upscale)
+            cell_km=cell_km, upscale=frame_upscale)
         cr = _build_crust_image(
             owner, crust, age, thick, max_age, "crust (cont. tan / ocean age)",
-            upscale=frame_upscale)
+            cell_km=cell_km, upscale=frame_upscale)
         thk = _build_thickness_image(
             owner, thick, "thickness (km: navy=0, cyan=12, gold=40, red=60+)",
-            upscale=frame_upscale)
+            cell_km=cell_km, upscale=frame_upscale)
         topo = _build_topography_image(
             owner, crust, age, thick, sim_config,
             "topography (km: deep navy=-6, sandy=0, brown=3, white=5+)",
-            upscale=frame_upscale)
+            cell_km=cell_km, upscale=frame_upscale)
         # Overlay hotspot markers on all per-tick frame panels.
         # Active = red filled disk; extinct = hollow grey ring (so the
         # provenance of older trails stays visible). No crop offset:
@@ -147,13 +149,17 @@ def simulate_rigid_polygon(
         frames_thickness.append(_combine_frame(thk, cr, header))
         frames_topography.append(_combine_frame(topo, cr, header))
 
-    # Polygon at t=0 — derived from initial cell_mask. Cull right away so
-    # any pre-existing nearest-particle Voronoi fragments are dropped.
+    # Cull right away so any pre-existing nearest-particle Voronoi
+    # fragments are dropped. Polygon construction is deferred to the
+    # end of the sim — see _build_polygons_for_render below; the
+    # alpha-complex is only consumed by polygons.png at render time,
+    # so rebuilding it every tick was 36% of program self-time on
+    # the v0.1 profile.
     rel, redist, spawn = _cull_disconnected(plates, spawn_rng, sim_config)
     total_released += rel
     total_redistributed += redist
     total_spawned += spawn
-    _re_extract_polygons(plates, domain, cell_xy, cell_km, sim_config)
+    _mark_dead_small_plates(plates)
     capture(0)
 
     total_collisions = 0
@@ -202,7 +208,7 @@ def simulate_rigid_polygon(
         total_released += rel
         total_redistributed += redist
         total_spawned += spawn
-        _re_extract_polygons(plates, domain, cell_xy, cell_km, sim_config)
+        _mark_dead_small_plates(plates)
 
         if rift_rng.random() < sim_config.rift_prob_per_tick:
             if _rift_plate(plates, domain, divergence_kmpy,
@@ -214,7 +220,7 @@ def simulate_rigid_polygon(
                 total_released += rel
                 total_redistributed += redist
                 total_spawned += spawn
-                _re_extract_polygons(plates, domain, cell_xy, cell_km, sim_config)
+                _mark_dead_small_plates(plates)
                 n_rifts += 1
 
         if tick % 10 == 0:
@@ -256,6 +262,11 @@ def simulate_rigid_polygon(
 
     # Bake buoyancy for the render.
     _apply_buoyancy_to_thickness(plates, sim_config)
+
+    # Build the per-plate alpha-complex ONCE, at the end. It's only
+    # consumed by polygons.png at render time — building it every
+    # tick during the sim was wasted work.
+    _build_polygons_for_render(plates, domain, cell_xy, cell_km, sim_config)
     owner, crust, age, thick = _flatten_state(plates, gy, gx)
     return (
         plates, owner, crust, age, thick, cell_km, timeline,

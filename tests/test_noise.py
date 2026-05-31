@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import random
 
+import numpy as np
 import pytest
 
-from worldgen.noise import PerlinNoise2D, fbm, ridged_fbm
+from tectonic_sim.noise import PerlinNoise2D, fbm, fbm_grid, ridged_fbm
 
 
 @pytest.fixture
@@ -100,3 +101,64 @@ def test_ridged_fbm_non_negative(noise: PerlinNoise2D) -> None:
         y = rng.uniform(-50, 50)
         v = ridged_fbm(noise, x, y, octaves=4, base_frequency=0.05)
         assert v >= 0.0
+
+
+# ----- Vectorized path ---------------------------------------------------
+
+
+def test_sample_grid_matches_scalar(noise: PerlinNoise2D) -> None:
+    """sample_grid must produce the same values as scalar sample, pointwise.
+
+    This is the contract that lets the seeding stage use the fast grid
+    path without diverging from the scalar elevation layer's noise.
+    """
+    rng = random.Random(7)
+    xs = np.array([rng.uniform(-30, 30) for _ in range(50)], dtype=np.float64)
+    ys = np.array([rng.uniform(-30, 30) for _ in range(50)], dtype=np.float64)
+    grid = noise.sample_grid(xs, ys)
+    for i, (x, y) in enumerate(zip(xs, ys)):
+        assert abs(float(grid[i]) - noise.sample(float(x), float(y))) < 1e-12
+
+
+def test_sample_grid_2d_shape(noise: PerlinNoise2D) -> None:
+    """sample_grid preserves 2D input shape."""
+    xs = np.linspace(-5.0, 5.0, 13)
+    ys = np.linspace(-5.0, 5.0, 17)
+    gx, gy = np.meshgrid(xs, ys)
+    out = noise.sample_grid(gx, gy)
+    assert out.shape == (17, 13)
+    assert out.dtype == np.float64
+
+
+def test_fbm_grid_matches_scalar(noise: PerlinNoise2D) -> None:
+    """fbm_grid result equals scalar fbm at the same points."""
+    rng = random.Random(9)
+    xs = np.array([rng.uniform(-50, 50) for _ in range(30)], dtype=np.float64)
+    ys = np.array([rng.uniform(-50, 50) for _ in range(30)], dtype=np.float64)
+    grid = fbm_grid(noise, xs, ys, octaves=4, base_frequency=0.05)
+    for i, (x, y) in enumerate(zip(xs, ys)):
+        scalar = fbm(noise, float(x), float(y), octaves=4, base_frequency=0.05)
+        assert abs(float(grid[i]) - scalar) < 1e-12
+
+
+def test_fbm_grid_bounded() -> None:
+    """fbm_grid output stays in approximately [-1, 1] across many octaves."""
+    n = PerlinNoise2D.from_rng(random.Random(11))
+    rng = np.random.default_rng(11)
+    xs = rng.uniform(-100, 100, 2000)
+    ys = rng.uniform(-100, 100, 2000)
+    out = fbm_grid(n, xs, ys, octaves=6, base_frequency=0.05)
+    assert out.max() <= 1.01
+    assert out.min() >= -1.01
+
+
+def test_perlin_from_numpy_generator() -> None:
+    """PerlinNoise2D.from_rng accepts np.random.Generator and is deterministic."""
+    gen1 = np.random.Generator(np.random.PCG64(42))
+    gen2 = np.random.Generator(np.random.PCG64(42))
+    n1 = PerlinNoise2D.from_rng(gen1)
+    n2 = PerlinNoise2D.from_rng(gen2)
+    assert n1.perm == n2.perm
+    # Should produce non-trivial noise.
+    sample = n1.sample(2.7, 3.3)
+    assert abs(sample) > 0.0

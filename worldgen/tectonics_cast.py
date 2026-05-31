@@ -154,10 +154,9 @@ def simulate_tectonics_via_continuous_sim(
     #     polygons.png convention).
     # Worldgen's own per-hex outputs (layers/elevation.png etc.) stay
     # world-sized because they're built from world_hexes.
-    capture = sim_cfg.snapshot_period_ticks > 0
     out = simulate_rigid_polygon(
         sim_domain, sim_cfg, seed=seed,
-        capture_every=1 if capture else 0,
+        capture_every=sim_cfg.snapshot_period_ticks,
         frame_upscale=4,
     )
     (

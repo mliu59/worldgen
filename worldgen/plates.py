@@ -21,7 +21,7 @@ from dataclasses import dataclass
 
 from worldgen.rng import RngHierarchy
 from worldgen.hex import Hex
-from worldgen.noise import PerlinNoise2D
+from tectonic_sim.noise import PerlinNoise2D
 from worldgen.types import PlateConfig
 from worldgen.world import map_half_extents_km, normalized_radial_position
 

@@ -41,7 +41,6 @@ If a design choice trades against any of these three, flag it and ask before pro
 ```
 worldgen/
 ├── hex.py             — Hex coordinate primitive (axial + spiral iterator)
-├── noise.py           — PerlinNoise2D, fbm, ridged_fbm (pure, seeded)
 ├── terrain.py         — TERRAIN_NAMES (the canonical biome name tuple)
 ├── rng.py             — RngHierarchy (sha256-keyed child RNGs)
 ├── types.py           — WorldgenConfig + per-layer dataclasses + HexData
@@ -127,6 +126,29 @@ so plate drift, sutures, and hotspots remain visible everywhere. The
 worldgen-specific per-hex outputs (`layers/elevation.png`, etc.) stay
 world-sized because they're built from the hex set.
 
+The export also writes `tectonic_sim_views/state.npz` — the raw sim
+arrays (`owner`, `crust`, `age`, `thickness`) + cell geometry + the
+isostasy scalars needed to derive signed elevation. `tectonic_sim.io`
+(`save_state` / `load_state` / `SimState`) is the canonical reader.
+Offline analysis tools like `tectonic_sim.transect` consume this file
+directly; they never re-run the sim.
+
+**1D transect tool** (`python -m tectonic_sim.transect state.npz
+--p1=x1,y1 --p2=x2,y2 --out path.png`) samples plate ownership, crust
+thickness, age, and signed elevation along an arbitrary Cartesian
+segment in sim-centred km. The segment is interpreted literally
+(direct line, not toroidal-shortest); cell lookups wrap so a segment
+that runs off one edge still reads sensible values. The rendered PNG
+has two stacked panels — elevation with a sea-level reference line on
+top, thickness below — coloured per plate with the same palette as
+`partition.png`.
+
+All `tectonic_sim_views/` PNGs (partition / crust / thickness /
+topography / polygons) carry km tick marks + labels along the bottom
+and left edges (`_overlay_km_axes` in `viz.py`). The km coordinates
+read off these axes feed directly into the transect tool's
+`--p1`/`--p2` arguments — no mental conversion from cell indices.
+
 The polygon sim itself models plate kinematics, contention, fusion,
 rifting, accretion, hotspot volcanism, erosion, and connected-component
 culling as a per-tick pipeline. See `tectonic_sim/polygon_sim/` for the
@@ -151,6 +173,18 @@ loser gains `folding_loser_side_ratio · t`, mantle absorbs the rest.
 At triple junctions, each loser contributes independently into its
 own continent. Belt cells running off-plate or onto oceanic crust
 drop their mass (models belt running into ocean).
+
+**Continental relief is seeded as Perlin fBm noise at t=0.** Continental
+cells get a zero-mean (per-plate) thickness perturbation in physical
+km at continent-scale wavelengths. After sea-level sampling, the thin
+spots become shelves / inland seas / straits and the thick spots
+stand proud — what would otherwise be featureless plate interiors
+turn into varied continents with shelf systems, archipelagos, and
+inland basins. Knobs: `continental_relief_amplitude_km`,
+`continental_relief_wavelength_km`, `continental_relief_octaves`,
+`continental_relief_persistence`. 0 amplitude disables. Combines
+naturally with the decoupled sea-level knob — one sim run yields a
+family of geographies as `sea_level_km` sweeps.
 
 **Boundary mode is torus-only.** Every spatial query inside
 `tectonic_sim` uses the toroidal shortest-path metric.

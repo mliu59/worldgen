@@ -363,14 +363,15 @@ def _export_polygon_views(out_dir: Path, snap: dict) -> None:
 
     # 1. partition.png — plate ownership + edges + plate-ID labels.
     _save_with_hotspots(
-        build_partition_image(owner, cap, upscale=upscale),
+        build_partition_image(owner, cap, cell_km=cell_km, upscale=upscale),
         out_dir / "partition.png",
     )
     # 2. crust.png — continental tan / oceanic blue.
     max_age = float(age.max() or 1)
     _save_with_hotspots(
         build_crust_image(
-            owner, crust, age, thick, max_age, cap, upscale=upscale,
+            owner, crust, age, thick, max_age, cap,
+            cell_km=cell_km, upscale=upscale,
         ),
         out_dir / "crust.png",
     )
@@ -380,7 +381,7 @@ def _export_polygon_views(out_dir: Path, snap: dict) -> None:
     thk_img = build_thickness_image(
         owner, thick,
         f"thickness  {gx}×{gy}  cell={cell_km:.1f}km  mean={mean_thick:.1f}km",
-        upscale=upscale,
+        cell_km=cell_km, upscale=upscale,
     )
     overlay_hotspots(
         thk_img, hotspots, final_tick,
@@ -391,7 +392,8 @@ def _export_polygon_views(out_dir: Path, snap: dict) -> None:
     # 4. topography.png — elevation colormap.
     _save_with_hotspots(
         build_topography_image(
-            owner, crust, age, thick, sim_cfg, cap, upscale=upscale,
+            owner, crust, age, thick, sim_cfg, cap,
+            cell_km=cell_km, upscale=upscale,
         ),
         out_dir / "topography.png",
     )
@@ -404,6 +406,12 @@ def _export_polygon_views(out_dir: Path, snap: dict) -> None:
         save_drift_gif(frames_thickness, out_dir / "thickness.gif", fps=10)
     if frames_topography:
         save_drift_gif(frames_topography, out_dir / "topography.gif", fps=10)
+    # 9. state.npz — raw arrays + isostasy scalars for offline analysis
+    # (transect tool, future probe tools). Tiny on disk; lets every
+    # downstream tool read crust thickness, plate ownership, age, and
+    # signed elevation along arbitrary paths without re-running the sim.
+    from tectonic_sim import save_state
+    save_state(out_dir / "state.npz", snap)
 
 
 def export_world(
@@ -589,7 +597,7 @@ def _exec_under_pyspy(args: argparse.Namespace) -> None:
     ]
     print(f"Profiling worldgen under py-spy @ {args.profile_sample_rate} Hz")
     print(f"  command: {' '.join(pyspy_cmd)}")
-    print(f"  flame graph → {out_svg}")
+    print(f"  flame graph -> {out_svg}")
     result = subprocess.run(pyspy_cmd, check=False)
     if result.returncode != 0:
         print(

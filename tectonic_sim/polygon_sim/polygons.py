@@ -1,17 +1,21 @@
-"""Alpha-complex polygons: construction + per-tick re-extraction.
+"""Alpha-complex polygons: construction + per-tick aliveness sweep.
 
-Two responsibilities, kept in one module because they're inseparable
-in practice (every consumer that re-extracts also needs the build /
-drift helpers, and vice versa):
+Two responsibilities, kept in one module because they share the same
+``cell_mask`` -> point-cloud bookkeeping:
 
-  - ``_circumradius`` / ``_build_alpha_complex`` / ``_drift_polygon``
+  - ``_circumradius`` / ``_build_alpha_complex``
     — primitives for building an alpha-complex polygon from a point
-    cloud in the plate's local (wrap-aware) frame, and advancing the
-    polygon's reference point by a drift vector.
+    cloud in the plate's local (wrap-aware) frame.
 
-  - ``_re_extract_polygons`` — per-tick driver that rebuilds every
-    alive plate's polygon from its current ``cell_mask`` and marks
-    plates with too few cells (or degenerate point clouds) as not-alive.
+  - ``_mark_dead_small_plates`` — cheap per-tick sweep that marks
+    plates with fewer than 4 owned cells as not-alive. Called every
+    tick from the sim loop.
+
+  - ``_build_polygons_for_render`` — expensive Delaunay-based polygon
+    construction over every alive plate. Called **once**, at the very
+    end of the sim, just before ``_render_polygons`` consumes the
+    result for ``polygons.png``. The polygon is not read by any
+    per-tick code path, so building it 100× per run was pure waste.
 """
 
 from __future__ import annotations
@@ -66,35 +70,56 @@ def _build_alpha_complex(
     return tri, keep, ref
 
 
-def _drift_polygon(complex_: AlphaComplex, dx: float, dy: float) -> AlphaComplex:
-    tri, keep, ref = complex_
-    return tri, keep, ref + np.array([dx, dy], dtype=np.float64)
-
-
 # ---------------------------------------------------------------------------
-# Per-tick re-extraction.
+# Per-tick aliveness sweep (cheap).
 # ---------------------------------------------------------------------------
 
 
-def _re_extract_polygons(
-    plates: list[PolygonPlate], domain: WorldRect,
-    cell_xy: np.ndarray, cell_km: float, sim_config,
-) -> None:
-    """Rebuild each plate's alpha-complex from its owned-cell centres.
-    Marks plates with too few cells as not-alive."""
-    alpha = sim_config.alpha_factor * cell_km
+def _mark_dead_small_plates(plates: list[PolygonPlate]) -> None:
+    """Mark plates with fewer than 4 owned cells as not-alive.
+
+    Cheap counterpart to the old ``_re_extract_polygons``: handles the
+    aliveness-marking side effect every tick *without* doing the
+    Delaunay-based polygon build, which is only needed for the final
+    ``polygons.png`` render and is now deferred to ``_build_polygons_for_render``.
+    """
     for p in plates:
         if not p.alive:
             continue
+        if int(p.cell_mask.sum()) < 4:
+            p.alive = False
+            p.polygon = None
+
+
+# ---------------------------------------------------------------------------
+# End-of-sim polygon construction (expensive — runs once).
+# ---------------------------------------------------------------------------
+
+
+def _build_polygons_for_render(
+    plates: list[PolygonPlate], domain: WorldRect,
+    cell_xy: np.ndarray, cell_km: float, sim_config,
+) -> None:
+    """Build an alpha-complex polygon for every alive plate from its
+    current owned-cell centres.
+
+    The polygon is **not** consumed by any per-tick sim code — it only
+    exists to feed the ``polygons.png`` renderer at export time. So
+    this runs exactly once, after the simulation finishes, instead of
+    every tick.
+
+    Plates that survive culling and aliveness checks but produce a
+    degenerate point cloud (e.g. all collinear cells) get their
+    ``polygon`` left as ``None``; the renderer skips them.
+    """
+    alpha = sim_config.alpha_factor * cell_km
+    for p in plates:
+        if not p.alive:
+            p.polygon = None
+            continue
         sel = p.cell_mask.ravel()
         if int(sel.sum()) < 4:
-            p.alive = False
             p.polygon = None
             continue
         pts = cell_xy[sel]
-        cx = _build_alpha_complex(pts, domain, alpha)
-        if cx is None:
-            p.alive = False
-            p.polygon = None
-            continue
-        p.polygon = cx
+        p.polygon = _build_alpha_complex(pts, domain, alpha)

@@ -120,9 +120,12 @@ erosion_period = 10
 erosion_strength = 0.05
 
 # --- Snapshot capture (drift animation) ---
-# Capture a Frame every N ticks. 0 disables capture. 1 captures every tick,
-# producing the smoothest drift GIF.
-snapshot_period_ticks = 1
+# Capture a frame every N ticks. 0 disables capture entirely. Larger
+# N means fewer GIF frames and a faster export — PIL palette
+# conversion for the GIFs is the second-largest cost in the run after
+# the sim itself, so the default 5 trades visual smoothness for ~5x
+# fewer encoded frames. Set to 1 for the smoothest drift GIF.
+snapshot_period_ticks = 5
 
 
 # =========================================================================
@@ -296,8 +299,38 @@ voronoi_weight_sigma = 0.3
 voronoi_weight_scale_km = 60.0
 
 # --- Initial thickness variation ---
-# Two compounded sources: per-plate baseline multiplier (log-normal),
-# and per-cell smoothed noise field (intra-plate roughness).
+# Per-plate baseline multiplier (log-normal): each plate's average
+# continental/oceanic thickness gets scaled by exp(N(0, sigma)). 0
+# disables. Knob for plate-to-plate "this continent is thicker on
+# average than that one" variability.
 init_thickness_per_plate_sigma = 0.10
-init_thickness_noise_amplitude_frac = 0.08
-init_thickness_noise_sigma_cells = 5.0
+
+# --- Continental relief (Perlin fBm "ancient basement topography") ---
+# Per-cell zero-mean perturbation in physical km, applied only to
+# continental cells. Total continental mass per plate is preserved
+# exactly (zero-mean per plate). After sea-level sampling, the thin
+# spots become continental shelves / inland seas / straits and the thick
+# spots stand proud — producing varied continental interiors instead of
+# featureless plateaus.
+#
+# Combining this with the decoupled sea_level_km knob (sea level is a
+# passive sampling threshold) means one sim run yields a family of
+# geographies: low sea level → deep continental dissection, high sea
+# level → archipelagos.
+#
+#   amplitude_km    — std-dev of the perturbation. ~5 km against the
+#                     35 km continental baseline gives a few cells
+#                     dipping into shelf territory; 8 km gets proper
+#                     straits and continental islands.
+#   wavelength_km   — base octave wavelength. Sets the *scale* of
+#                     features. 1500 km → broad inland basins;
+#                     400 km → individual islands and dissected coasts.
+#   octaves         — fractal depth. 4 gives enough detail to look
+#                     natural without speckling.
+#   persistence     — amplitude falloff per octave (0.5 is standard fBm).
+#
+# 0 amplitude disables the feature entirely (flat continental interiors).
+continental_relief_amplitude_km = 10.0
+continental_relief_wavelength_km = 1000.0
+continental_relief_octaves = 4
+continental_relief_persistence = 0.5

@@ -20,7 +20,7 @@ from collections.abc import Iterable
 from worldgen._log import progress
 from worldgen.rng import RngHierarchy
 from worldgen.hex import Hex
-from worldgen.noise import PerlinNoise2D, fbm, ridged_fbm
+from tectonic_sim.noise import PerlinNoise2D, fbm, ridged_fbm
 from worldgen.tectonics import LithosphereState
 from worldgen.types import ElevationLayer, WorldgenConfig
 

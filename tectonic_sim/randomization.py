@@ -240,6 +240,24 @@ _SIM_CONFIG_RANDOMIZERS: tuple[FieldRandomizer, ...] = (
     FieldRandomizer("folding_belt_loser_decay_km",
                     std=5.0, minimum=5.0, maximum=80.0),
 
+    # --- Continental relief (Perlin "ancient basement topography") ---
+    # Amplitude: ~25 % spread around the 6-km baseline at T=1; capped to
+    # zero on the low side (negative amplitude is meaningless) and 15 km
+    # on the high side (any larger and the noise dominates the 35 km
+    # continental baseline, producing oceanic-floored continents).
+    FieldRandomizer("continental_relief_amplitude_km",
+                    std=2.0, minimum=0.0, maximum=15.0),
+    # Wavelength: spans a 4× range at T=1 — 200 km (small islands /
+    # archipelagos) to 3000 km (broad sub-continental basins).
+    FieldRandomizer("continental_relief_wavelength_km",
+                    std=400.0, minimum=200.0, maximum=3000.0),
+    # Octaves: small integer field. Std 1 covers 3-5 typical settings.
+    FieldRandomizer("continental_relief_octaves",
+                    std=1.0, minimum=2, maximum=6, is_integer=True),
+    # Persistence: tight std — extreme draws are visually noisy.
+    FieldRandomizer("continental_relief_persistence",
+                    std=0.1, minimum=0.2, maximum=0.7),
+
     # --- Velocity damping ---
     FieldRandomizer("velocity_damping_strength",
                     std=0.03, minimum=0.0, maximum=0.30),

@@ -18,7 +18,7 @@ from collections import deque
 from worldgen._log import progress
 from worldgen.rng import RngHierarchy
 from worldgen.hex import Hex
-from worldgen.noise import PerlinNoise2D
+from tectonic_sim.noise import PerlinNoise2D
 from worldgen.ocean import OceanLayer
 from worldgen.types import (
     ClimateLayer,

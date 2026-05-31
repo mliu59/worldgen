@@ -37,6 +37,7 @@ _SPAWN_RNG_TAG: int = 0xC003
 _VORONOI_RNG_TAG: int = 0xE005
 _ACCRETION_RNG_TAG: int = 0xD004
 _HOTSPOT_RNG_TAG: int = 0xF006
+_CONTINENTAL_RELIEF_RNG_TAG: int = 0x1007
 
 
 # ---------------------------------------------------------------------------

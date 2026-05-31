@@ -22,6 +22,133 @@ def _color_for(pid: int) -> tuple[int, int, int]:
     return int(r * 255), int(g * 255), int(b * 255)
 
 
+# Candidate km step sizes for the axis ruler. Picked so a typical
+# sim width (1-4 thousand km) yields 5–10 ticks per axis. Numbers
+# are round so users typing into the transect CLI can read off
+# easy-to-remember coordinates.
+_AXIS_KM_STEPS = (50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0)
+
+
+def _pick_axis_step_km(extent_km: float, target_ticks: int = 8) -> float:
+    """Choose a 'nice' tick spacing so there are about ``target_ticks``
+    ticks across an axis spanning ``extent_km``."""
+    ideal = extent_km / max(1, target_ticks)
+    best = _AXIS_KM_STEPS[0]
+    best_diff = abs(np.log(ideal / best))
+    for step in _AXIS_KM_STEPS[1:]:
+        d = abs(np.log(ideal / step))
+        if d < best_diff:
+            best = step
+            best_diff = d
+    return best
+
+
+def _overlay_km_axes(
+    img,
+    *,
+    sim_width_km: float,
+    sim_height_km: float,
+    upscale: int,
+) -> None:
+    """Draw km tick marks + labels along the bottom and left edges of
+    ``img`` so coordinates can be read directly off the visualisation.
+
+    The image is assumed to cover the sim's centred frame
+    ``[-sim_width_km/2, +sim_width_km/2] × [-sim_height_km/2, +sim_height_km/2]``
+    with pixel-x = ``(kx + half_w) * upscale / cell_km``. Ticks are
+    drawn IN-FRAME (no padding added) so image dimensions stay
+    unchanged — this matters for ``_combine_frame`` which assumes
+    matching pixel sizes for side-by-side panels.
+
+    Step size is auto-chosen from ``_AXIS_KM_STEPS`` (50/100/200/500/...
+    km) so labels stay readable at any sim size. Ticks are placed at
+    every multiple of ``step`` within ``[-half, +half]``, including 0.
+    """
+    from PIL import ImageDraw, ImageFont
+
+    W, H = img.size
+    half_w = sim_width_km / 2.0
+    half_h = sim_height_km / 2.0
+    px_per_km_x = W / sim_width_km
+    px_per_km_y = H / sim_height_km
+
+    step_x = _pick_axis_step_km(sim_width_km)
+    step_y = _pick_axis_step_km(sim_height_km)
+
+    draw = ImageDraw.Draw(img)
+    try:
+        font = ImageFont.truetype("arial.ttf", size=max(10, upscale * 2))
+    except OSError:
+        font = ImageFont.load_default()
+
+    tick_len = max(4, upscale)
+    text_ink = (15, 15, 15)
+    text_halo = (255, 255, 255)
+    tick_ink = (15, 15, 15)
+    tick_halo = (255, 255, 255)
+
+    def _x_to_px(kx: float) -> float:
+        return (kx + half_w) * px_per_km_x
+
+    def _y_to_px(ky: float) -> float:
+        return (ky + half_h) * px_per_km_y
+
+    # X axis ticks (bottom edge).
+    k = -int(half_w // step_x) * step_x
+    # Snap to the smallest multiple of step >= -half_w (avoid drawing
+    # exactly on the canvas edge where the label gets clipped).
+    while k <= half_w + 1e-6:
+        px = _x_to_px(k)
+        if 0.5 < px < W - 0.5:
+            # Two-tone tick: white halo behind black mark for contrast.
+            draw.line(
+                [(px, H - 1), (px, H - 1 - tick_len - 1)],
+                fill=tick_halo, width=3)
+            draw.line(
+                [(px, H - 1), (px, H - 1 - tick_len)],
+                fill=tick_ink, width=1)
+            label = f"{k:+.0f}" if k != 0 else "0"
+            # Label sits just ABOVE the tick (inside the image).
+            draw.text(
+                (px, H - 2 - tick_len),
+                label, fill=text_ink, font=font,
+                anchor="md",
+                stroke_width=2, stroke_fill=text_halo)
+        k += step_x
+
+    # Y axis ticks (left edge). Skip a clear zone at the top of the
+    # image where every panel's caption (`caption` text drawn at (6, 6))
+    # would otherwise collide with the topmost y label.
+    caption_clear_px = max(20, upscale * 4)
+    k = -int(half_h // step_y) * step_y
+    while k <= half_h + 1e-6:
+        py = _y_to_px(k)
+        if caption_clear_px < py < H - 0.5:
+            draw.line(
+                [(0, py), (tick_len + 1, py)],
+                fill=tick_halo, width=3)
+            draw.line(
+                [(0, py), (tick_len, py)],
+                fill=tick_ink, width=1)
+            label = f"{k:+.0f}" if k != 0 else "0"
+            # Label sits just RIGHT of the tick (inside the image).
+            draw.text(
+                (tick_len + 3, py),
+                label, fill=text_ink, font=font,
+                anchor="lm",
+                stroke_width=2, stroke_fill=text_halo)
+        k += step_y
+
+    # Small "km" unit hint in the bottom-left corner so it's clear the
+    # tick numbers are coordinates, not cell indices.
+    draw.text(
+        (4, H - 2 - tick_len - max(10, upscale * 2) - 2),
+        "km",
+        fill=text_ink, font=font,
+        anchor="lb",
+        stroke_width=2, stroke_fill=text_halo)
+
+
 def _overlay_hotspots(
     img, hotspots: list[Hotspot], tick: int,
     *, cell_km: float, gy: int, gx: int, upscale: int,
@@ -85,8 +212,8 @@ def _overlay_hotspots(
             stroke_width=2, stroke_fill=(255, 255, 255))
 
 
-def _build_partition_image(owner, caption, upscale=6, draw_edges=True,
-                           draw_labels=True):
+def _build_partition_image(owner, caption, *, cell_km, upscale=6,
+                           draw_edges=True, draw_labels=True):
     """Construct a partition view as a PIL Image (no save).
 
     When ``draw_labels`` is True, each plate's integer id is drawn at the
@@ -152,14 +279,22 @@ def _build_partition_image(owner, caption, upscale=6, draw_edges=True,
                 anchor="mm",
                 stroke_width=2, stroke_fill=(255, 255, 255))
     draw.text((6, 6), caption, fill=(0, 0, 0))
+    _overlay_km_axes(
+        img,
+        sim_width_km=gx * cell_km, sim_height_km=gy * cell_km,
+        upscale=upscale,
+    )
     return img
 
 
-def _render_partition(owner, out_path, caption, upscale=6):
-    _build_partition_image(owner, caption, upscale).save(out_path)
+def _render_partition(owner, out_path, caption, *, cell_km, upscale=6):
+    _build_partition_image(
+        owner, caption, cell_km=cell_km, upscale=upscale,
+    ).save(out_path)
 
 
-def _build_crust_image(owner, crust, age, thick, max_age, caption, upscale=6):
+def _build_crust_image(owner, crust, age, thick, max_age, caption,
+                       *, cell_km, upscale=6):
     """Construct a crust view as a PIL Image (no save)."""
     from PIL import Image, ImageDraw
     gy, gx = owner.shape
@@ -196,13 +331,20 @@ def _build_crust_image(owner, crust, age, thick, max_age, caption, upscale=6):
     big = np.repeat(np.repeat(rgb, upscale, axis=0), upscale, axis=1)
     img = Image.fromarray(big, "RGB")
     ImageDraw.Draw(img).text((6, 6), caption, fill=(0, 0, 0))
+    _overlay_km_axes(
+        img,
+        sim_width_km=gx * cell_km, sim_height_km=gy * cell_km,
+        upscale=upscale,
+    )
     return img
 
 
 def _render_crust(owner, crust, age, thick, max_age, out_path, caption,
-                  upscale=6):
+                  *, cell_km, upscale=6):
     _build_crust_image(
-        owner, crust, age, thick, max_age, caption, upscale).save(out_path)
+        owner, crust, age, thick, max_age, caption,
+        cell_km=cell_km, upscale=upscale,
+    ).save(out_path)
 
 
 # 8-stop topography colormap (km elevation → RGB).
@@ -221,7 +363,7 @@ _TOPO_STOPS = np.array([
 
 
 def _build_topography_image(
-    owner, crust, age, thick, sim_config, caption, upscale=6):
+    owner, crust, age, thick, sim_config, caption, *, cell_km, upscale=6):
     """Render signed elevation (km above/below sea level) using a
     classic land/sea topographic colormap.
 
@@ -257,13 +399,21 @@ def _build_topography_image(
     big = np.repeat(np.repeat(rgb, upscale, axis=0), upscale, axis=1)
     img = Image.fromarray(big, "RGB")
     ImageDraw.Draw(img).text((6, 6), caption, fill=(255, 255, 255))
+    _overlay_km_axes(
+        img,
+        sim_width_km=gx * cell_km, sim_height_km=gy * cell_km,
+        upscale=upscale,
+    )
     return img
 
 
 def _render_topography(
-    owner, crust, age, thick, sim_config, out_path, caption, upscale=6):
+    owner, crust, age, thick, sim_config, out_path, caption,
+    *, cell_km, upscale=6):
     _build_topography_image(
-        owner, crust, age, thick, sim_config, caption, upscale).save(out_path)
+        owner, crust, age, thick, sim_config, caption,
+        cell_km=cell_km, upscale=upscale,
+    ).save(out_path)
 
 
 # 5-stop colormap for crust thickness. Stops correspond to:
@@ -282,7 +432,7 @@ _THICKNESS_STOPS_RGB = np.array([
 ], dtype=np.float64)
 
 
-def _build_thickness_image(owner, thickness, caption, upscale=6):
+def _build_thickness_image(owner, thickness, caption, *, cell_km, upscale=6):
     """Crust-thickness heatmap using the 5-stop colormap above.
 
     Unowned cells (owner < 0) render as dark gray. Owned cells are
@@ -319,6 +469,11 @@ def _build_thickness_image(owner, thickness, caption, upscale=6):
     big = np.repeat(np.repeat(rgb, upscale, axis=0), upscale, axis=1)
     img = Image.fromarray(big, "RGB")
     ImageDraw.Draw(img).text((6, 6), caption, fill=(255, 255, 255))
+    _overlay_km_axes(
+        img,
+        sim_width_km=gx * cell_km, sim_height_km=gy * cell_km,
+        upscale=upscale,
+    )
     return img
 
 
@@ -499,6 +654,11 @@ def _render_polygons(domain, plates, out_path, caption, upscale=6):
         (6, 6),
         caption + "  | fill=cell_mask, outline=alpha-complex polygon",
         fill=(20, 20, 20))
+    _overlay_km_axes(
+        img,
+        sim_width_km=domain.width_km, sim_height_km=domain.height_km,
+        upscale=upscale,
+    )
     img.save(out_path)
 
 

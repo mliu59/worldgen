@@ -281,8 +281,22 @@ class SimConfig:
     voronoi_weight_sigma: float
     voronoi_weight_scale_km: float
 
-    # Initial thickness variation overlays (per-plate baseline + per-cell
-    # noise field). 0 → uniform 35/7 km per crust type.
+    # Initial thickness variation overlays.
+    #
+    #   init_thickness_per_plate_sigma — per-plate scalar multiplier
+    #     drawn log-normally. 0 disables. Knob for size of plate-to-plate
+    #     average-thickness variability.
+    #
+    #   continental_relief_* — per-cell Perlin fBm thickness perturbation
+    #     applied to continental cells only, zero-mean per plate. This is
+    #     "ancient basement topography": noise wavelengths in the hundreds
+    #     of km produce shelves, inland basins, straits, and continental
+    #     islands after sea-level sampling. Wavelength controls the
+    #     scale of features (200 km → small archipelagos, 1500 km → broad
+    #     basins). Amplitude is in physical km — typical: 4–8 km against
+    #     the ~35 km continental baseline. 0 → flat continental interiors.
     init_thickness_per_plate_sigma: float
-    init_thickness_noise_amplitude_frac: float
-    init_thickness_noise_sigma_cells: float
+    continental_relief_amplitude_km: float
+    continental_relief_wavelength_km: float
+    continental_relief_octaves: int
+    continental_relief_persistence: float

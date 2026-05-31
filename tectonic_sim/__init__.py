@@ -24,6 +24,11 @@ from tectonic_sim.config_loader import (
     load_sim_config,
     load_sim_config_from_path,
 )
+from tectonic_sim.io import (
+    SimState,
+    load_state,
+    save_state,
+)
 from tectonic_sim.randomization import (
     FieldRandomizer,
     randomize_dataclass_fields,
@@ -43,11 +48,14 @@ __all__ = [
     "CRUST_OCEANIC",
     "FieldRandomizer",
     "SimConfig",
+    "SimState",
     "WorldRect",
     "crust_type_code",
     "crust_type_name",
     "load_sim_config",
     "load_sim_config_from_path",
+    "load_state",
     "randomize_dataclass_fields",
     "randomize_sim_config",
+    "save_state",
 ]

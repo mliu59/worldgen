@@ -1,4 +1,10 @@
-"""Drift (stamping translation) + rotation."""
+"""Drift (stamping translation) + rotation.
+
+The alpha-complex ``polygon`` is built only at the end of the sim by
+``_build_polygons_for_render`` from the final ``cell_mask`` — there's
+no per-tick polygon to drift here, so this module only moves the cell
+grids and lets the polygon be derived once from the final position.
+"""
 
 from __future__ import annotations
 
@@ -6,7 +12,6 @@ import numpy as np
 
 from tectonic_sim.types import WorldRect
 
-from tectonic_sim.polygon_sim.polygons import _drift_polygon
 from tectonic_sim.polygon_sim.types import PolygonPlate
 
 
@@ -16,8 +21,7 @@ from tectonic_sim.polygon_sim.types import PolygonPlate
 def _stamp_paint(plates: list[PolygonPlate], dt: float, cell_km: float) -> None:
     """Roll each plate's mask + paint by an integer cell shift derived
     from ``velocity * dt + accum``. Sub-cell remainder kept in ``accum``
-    so a slow plate still drifts eventually. Polygon ref drifts
-    continuously by ``velocity * dt`` in lockstep.
+    so a slow plate still drifts eventually.
     """
     for p in plates:
         if not p.alive:
@@ -29,20 +33,11 @@ def _stamp_paint(plates: list[PolygonPlate], dt: float, cell_km: float) -> None:
         p.accum = np.array([ax - sx * cell_km, ay - sy * cell_km],
                            dtype=np.float64)
         if sx == 0 and sy == 0:
-            # Polygon still drifts (continuous) — paint stays put this tick.
-            if p.polygon is not None:
-                p.polygon = _drift_polygon(
-                    p.polygon, float(p.velocity_kmpy[0] * dt),
-                    float(p.velocity_kmpy[1] * dt))
             continue
         p.cell_mask = np.roll(p.cell_mask, shift=(sy, sx), axis=(0, 1))
         p.crust = np.roll(p.crust, shift=(sy, sx), axis=(0, 1))
         p.age = np.roll(p.age, shift=(sy, sx), axis=(0, 1))
         p.thickness = np.roll(p.thickness, shift=(sy, sx), axis=(0, 1))
-        if p.polygon is not None:
-            p.polygon = _drift_polygon(
-                p.polygon, float(p.velocity_kmpy[0] * dt),
-                float(p.velocity_kmpy[1] * dt))
 
 
 def _rotate_plates(
