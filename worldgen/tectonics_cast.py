@@ -144,15 +144,21 @@ def simulate_tectonics_via_continuous_sim(
         plate_count, motion_cap, sim_cfg.translation_speed_ratio, elapsed_total,
     )
 
-    # Polygon-sim run on the larger sim_domain. ``crop_km`` tells the
-    # per-tick frame capture to render the central world-sized region
-    # so the GIFs already show the cropped view.
+    # Polygon-sim runs on the larger sim_domain and returns FULL-SIM
+    # arrays + FULL-SIM captured frames. Worldgen reads them as-is:
+    #   - per-hex sampling reads the full sim grid directly (the hex's
+    #     world-frame km coordinate maps through wrap into the sim's
+    #     central region — no cropping needed);
+    #   - tectonic_sim_views/* PNGs and GIFs render the full sim, so
+    #     plate drift outside the world is visible (matching the
+    #     polygons.png convention).
+    # Worldgen's own per-hex outputs (layers/elevation.png etc.) stay
+    # world-sized because they're built from world_hexes.
     capture = sim_cfg.snapshot_period_ticks > 0
     out = simulate_rigid_polygon(
         sim_domain, sim_cfg, seed=seed,
         capture_every=1 if capture else 0,
         frame_upscale=4,
-        crop_km=(world_domain.width_km, world_domain.height_km),
     )
     (
         polygon_plates, owner, crust, age, thick, cell_km, timeline,

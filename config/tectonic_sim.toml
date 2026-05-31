@@ -69,6 +69,43 @@ folding_ratio = 0.5                       # mass transferred from smaller to lar
 folding_displacement_km = 1.5             # lower particle's drift toward the higher
 subduction_arc_uplift_km = 0.04           # oc/oo-collision thickening on the survivor
 
+# --- C-C fold-and-thrust belt ---
+# When two continental plates collide, the over-rider's crust thickens
+# across a wide *belt* extending inland from the suture, not just at the
+# contact cell. Per fold event, the mass `folding_ratio · loser_thick`
+# is distributed across cells extending up to `folding_belt_depth_km`
+# inland (opposite the over-rider's velocity), with weights decaying
+# exponentially with e-folding scale `folding_belt_decay_km`. The
+# integral of weights is normalized so total mass is conserved.
+#
+# 120 km / 35 km matches the rough geometry of the Himalaya-Tibet
+# orogen: dramatic uplift in the first ~40 km, broad high plateau out
+# to ~120 km, residual thickening fading beyond. Set depth = 0 to fall
+# back to the legacy single-suture-cell deposit (very tall, very thin).
+folding_belt_depth_km = 120.0
+folding_belt_decay_km = 35.0
+
+# --- Loser-side C-C fold belt (Himalayan foothill / Lesser-Himalaya analogue) ---
+# Mirror-image deposit on the *down-going* plate's near-suture
+# interior. Narrower and sharper than the over-rider's belt: a slice
+# of the underthrusting plate's crust gets scraped off and stacked
+# along the suture, building the foothill ridge. The peak sits one
+# cell INTO the loser's territory (the suture cell itself now belongs
+# to the over-rider).
+#
+# Mass accounting per fold event:
+#   over-rider gains: folding_ratio · loser_thick                       (wide belt)
+#   loser gains:      folding_loser_side_ratio · loser_thick            (narrow belt)
+#   mantle absorbs:   (1 − folding_ratio − folding_loser_side_ratio) · loser_thick
+# Sum of the two ratios should stay ≤ 1 (else mass is created).
+#
+# Defaults: 0.2 ratio, 50 km depth, 15 km decay — produces a sharp
+# ridge that decays within ~50 km, distinct from the broader 120 km
+# Tibet-style plateau on the other side of the suture.
+folding_loser_side_ratio = 0.2
+folding_belt_loser_depth_km = 50.0
+folding_belt_loser_decay_km = 15.0
+
 # --- Velocity damping ---
 # Plate-level damping: each tick, if `fraction` of a plate's cells are
 # in cross-plate collision pairs, its velocity is multiplied by

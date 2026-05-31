@@ -223,6 +223,22 @@ _SIM_CONFIG_RANDOMIZERS: tuple[FieldRandomizer, ...] = (
                     std=0.6, minimum=0.0, maximum=4.0),
     FieldRandomizer("subduction_arc_uplift_km",
                     std=0.02, minimum=0.01, maximum=0.15),
+    # Fold-belt geometry — width determines orogen breadth, decay sets
+    # the dramatic-uplift core's radius. Std picked so a T=1 draw moves
+    # the belt by ~30 % of the typical Himalayan scale.
+    FieldRandomizer("folding_belt_depth_km",
+                    std=30.0, minimum=0.0, maximum=400.0),
+    FieldRandomizer("folding_belt_decay_km",
+                    std=10.0, minimum=5.0, maximum=150.0),
+    # Loser-side belt — tighter ranges. Ratio capped at 0.7 so it can't
+    # alone exceed unity (would create mass); depth narrower than the
+    # over-rider; decay correspondingly tighter.
+    FieldRandomizer("folding_loser_side_ratio",
+                    std=0.08, minimum=0.0, maximum=0.7),
+    FieldRandomizer("folding_belt_loser_depth_km",
+                    std=15.0, minimum=0.0, maximum=200.0),
+    FieldRandomizer("folding_belt_loser_decay_km",
+                    std=5.0, minimum=5.0, maximum=80.0),
 
     # --- Velocity damping ---
     FieldRandomizer("velocity_damping_strength",

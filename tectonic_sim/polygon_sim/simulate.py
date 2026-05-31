@@ -29,7 +29,7 @@ from tectonic_sim.polygon_sim.momentum import _apply_momentum_exchange
 from tectonic_sim.polygon_sim.polygons import _re_extract_polygons
 from tectonic_sim.polygon_sim.rifting import _rift_plate
 from tectonic_sim.polygon_sim.seeding import _initial_state
-from tectonic_sim.polygon_sim.topology import _cell_centres, _crop_grids, _grid_dims
+from tectonic_sim.polygon_sim.topology import _cell_centres, _grid_dims
 from tectonic_sim.polygon_sim.types import (
     PolygonPlate,
     _ACCRETION_RNG_TAG,
@@ -42,7 +42,6 @@ from tectonic_sim.polygon_sim.viz import (
     _build_thickness_image,
     _build_topography_image,
     _combine_frame,
-    _crop_origin_cells,
     _overlay_hotspots)
 
 
@@ -52,14 +51,15 @@ from tectonic_sim.polygon_sim.viz import (
 
 def simulate_rigid_polygon(
     domain: WorldRect, sim_config, seed: int,
-    capture_every: int = 0, frame_upscale: int = 4,
-    crop_km: tuple[float, float] | None = None):
+    capture_every: int = 0, frame_upscale: int = 4):
     """Run the simulation.
 
     Returns ``(plates, owner, crust, age, thick, cell_km, timeline,
     frames)``. ``frames`` is a list of side-by-side partition+crust PIL
     Images, one per capture interval, or an empty list when
-    ``capture_every == 0``.
+    ``capture_every == 0``. All output (returned ndarrays and captured
+    frames) is the full sim domain — callers that want a sub-region
+    apply their own slicing.
     """
     plates, cell_km = _initial_state(domain, sim_config, seed)
     gy, gx, _ = _grid_dims(domain, sim_config)
@@ -78,29 +78,15 @@ def simulate_rigid_polygon(
         plates, hotspots,
         sim_config=sim_config, cell_km=cell_km, gy=gy, gx=gx,
         rng=hotspot_rng)
-    if hotspots:
-        crop_half_w = (crop_km[0] / 2.0) if crop_km is not None else None
-        crop_half_h = (crop_km[1] / 2.0) if crop_km is not None else None
-        for i, h in enumerate(hotspots):
-            in_crop = ""
-            if crop_half_w is not None:
-                inside = (abs(h.position_xy_km[0]) <= crop_half_w
-                          and abs(h.position_xy_km[1]) <= crop_half_h)
-                in_crop = "  [IN CROP]" if inside else "  [outside crop]"
-            death = h.birth_tick + h.lifespan_ticks
-            print(
-                f"  hotspot H{i}: "
-                f"pos=({h.position_xy_km[0]:+7.0f}, {h.position_xy_km[1]:+7.0f}) km   "
-                f"born={h.birth_tick:+4d}   "
-                f"lifespan={h.lifespan_ticks}   "
-                f"dies@{death:+4d}{in_crop}"
-            )
-
-    # Crop origin (in sim-cell coords) for hotspot overlay alignment.
-    crop_y0, crop_x0 = _crop_origin_cells(
-        gy, gx, cell_km,
-        crop_km[1] if crop_km is not None else None,
-        crop_km[0] if crop_km is not None else None)
+    for i, h in enumerate(hotspots):
+        death = h.birth_tick + h.lifespan_ticks
+        print(
+            f"  hotspot H{i}: "
+            f"pos=({h.position_xy_km[0]:+7.0f}, {h.position_xy_km[1]:+7.0f}) km   "
+            f"born={h.birth_tick:+4d}   "
+            f"lifespan={h.lifespan_ticks}   "
+            f"dies@{death:+4d}"
+        )
 
     timeline: list[tuple[int, int]] = [(0, sum(1 for p in plates if p.alive))]
     n_rifts = 0
@@ -121,11 +107,6 @@ def simulate_rigid_polygon(
         if capture_every <= 0:
             return
         owner, crust, age, thick = _flatten_state(plates, gy, gx)
-        if crop_km is not None:
-            owner, crust, age, thick = _crop_grids(
-                owner, crust, age, thick,
-                cell_km=cell_km,
-                crop_w_km=crop_km[0], crop_h_km=crop_km[1])
         max_age = max(1.0, float(age.max()))
         elapsed = tick * dt
         n_alive = sum(1 for p in plates if p.alive)
@@ -144,12 +125,14 @@ def simulate_rigid_polygon(
             upscale=frame_upscale)
         # Overlay hotspot markers on all per-tick frame panels.
         # Active = red filled disk; extinct = hollow grey ring (so the
-        # provenance of older trails stays visible).
+        # provenance of older trails stays visible). No crop offset:
+        # frames render the full sim, so the hotspot's mantle-frame
+        # position maps directly onto the panel's cell grid.
         for _panel in (part, cr, thk, topo):
             _overlay_hotspots(
                 _panel, hotspots, tick,
                 cell_km=cell_km, gy=gy, gx=gx, upscale=frame_upscale,
-                x0_cells=crop_x0, y0_cells=crop_y0,
+                x0_cells=0, y0_cells=0,
                 only_active=False)
         header = (
             f"tick={tick:3d}/{sim_config.n_ticks}   "
@@ -201,7 +184,7 @@ def simulate_rigid_polygon(
             plates, domain, gy, gx, cell_km, sim_config)
         _apply_velocity_damping(plates, sim_config)
         total_fusions += _apply_fusion(plates, sim_config)
-        _resolve_contention(plates, gy, gx, sim_config)
+        _resolve_contention(plates, gy, gx, sim_config, cell_km)
         _trailing_edge_fill(plates, prev_owner, sim_config, gy, gx)
         _apply_aging(plates, dt)
         total_accreted += _apply_co_accretion(

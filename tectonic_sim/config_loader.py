@@ -43,6 +43,11 @@ _REQUIRED_KEYS: tuple[str, ...] = (
     "folding_ratio",
     "folding_displacement_km",
     "subduction_arc_uplift_km",
+    "folding_belt_depth_km",
+    "folding_belt_decay_km",
+    "folding_loser_side_ratio",
+    "folding_belt_loser_depth_km",
+    "folding_belt_loser_decay_km",
     "velocity_damping_strength",
     "erosion_period",
     "erosion_strength",
@@ -140,6 +145,11 @@ def load_sim_config(table: dict[str, object]) -> SimConfig:
         folding_ratio=float(table["folding_ratio"]),  # type: ignore[arg-type]
         folding_displacement_km=float(table["folding_displacement_km"]),  # type: ignore[arg-type]
         subduction_arc_uplift_km=float(table["subduction_arc_uplift_km"]),  # type: ignore[arg-type]
+        folding_belt_depth_km=float(table["folding_belt_depth_km"]),  # type: ignore[arg-type]
+        folding_belt_decay_km=float(table["folding_belt_decay_km"]),  # type: ignore[arg-type]
+        folding_loser_side_ratio=float(table["folding_loser_side_ratio"]),  # type: ignore[arg-type]
+        folding_belt_loser_depth_km=float(table["folding_belt_loser_depth_km"]),  # type: ignore[arg-type]
+        folding_belt_loser_decay_km=float(table["folding_belt_loser_decay_km"]),  # type: ignore[arg-type]
         velocity_damping_strength=float(table["velocity_damping_strength"]),  # type: ignore[arg-type]
         erosion_period=int(table["erosion_period"]),  # type: ignore[arg-type]
         erosion_strength=float(table["erosion_strength"]),  # type: ignore[arg-type]

@@ -67,24 +67,6 @@ def _grid_dims(domain: WorldRect, sim_config) -> tuple[int, int, float]:
     return gy, gx, cell_km
 
 
-def _crop_grids(
-    *grids: np.ndarray, cell_km: float,
-    crop_w_km: float, crop_h_km: float) -> tuple[np.ndarray, ...]:
-    """Slice each (gy, gx) grid to a centred ``crop_w × crop_h`` km region.
-
-    Returns the same number of arrays as inputs. If the requested crop
-    is larger than the underlying grid, the full grid is returned.
-    """
-    if not grids:
-        return tuple()
-    gy, gx = grids[0].shape
-    crop_gy = min(gy, int(round(crop_h_km / cell_km)))
-    crop_gx = min(gx, int(round(crop_w_km / cell_km)))
-    y0 = (gy - crop_gy) // 2
-    x0 = (gx - crop_gx) // 2
-    return tuple(g[y0:y0 + crop_gy, x0:x0 + crop_gx] for g in grids)
-
-
 def _cell_centres(gy: int, gx: int, cell_km: float) -> np.ndarray:
     """Cell-centre coordinates in the centred [-half_w, +half_w] frame."""
     xs = (np.arange(gx) + 0.5) * cell_km - 0.5 * gx * cell_km

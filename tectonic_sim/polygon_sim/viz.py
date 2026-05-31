@@ -85,18 +85,6 @@ def _overlay_hotspots(
             stroke_width=2, stroke_fill=(255, 255, 255))
 
 
-def _crop_origin_cells(
-    gy: int, gx: int, cell_km: float,
-    crop_w_km: float | None, crop_h_km: float | None) -> tuple[int, int]:
-    """Top-left (y0, x0) of the centred crop in sim-cell coordinates.
-    Returns (0, 0) when no crop is being applied."""
-    if crop_w_km is None or crop_h_km is None:
-        return 0, 0
-    crop_gy = min(gy, int(round(crop_h_km / cell_km)))
-    crop_gx = min(gx, int(round(crop_w_km / cell_km)))
-    return (gy - crop_gy) // 2, (gx - crop_gx) // 2
-
-
 def _build_partition_image(owner, caption, upscale=6, draw_edges=True,
                            draw_labels=True):
     """Construct a partition view as a PIL Image (no save).

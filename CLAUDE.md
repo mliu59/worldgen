@@ -115,11 +115,42 @@ plates have room to drift), samples the final cell grid at every
 world-hex centre, and packages the raw polygon-sim output onto
 `LithosphereState.raw_snapshot` for export-time renderers.
 
+**`tectonic_sim` has no crop concept.** It outputs the full sim domain
+— per-tick frames and the final `(owner, crust, age, thickness)` ndarrays
+all cover the entire torus the sim runs on. Worldgen does its own
+sampling: `_sample_polygon_at_hex_centres` reads each world-hex's
+mantle-frame `(x, y)` directly from the full sim grid (wrap modulo
+puts the hex into the sim's central region by construction). The
+`tectonic_sim_views/` PNGs and GIFs that worldgen exports render the
+full sim — including the buffer area outside the world rectangle —
+so plate drift, sutures, and hotspots remain visible everywhere. The
+worldgen-specific per-hex outputs (`layers/elevation.png`, etc.) stay
+world-sized because they're built from the hex set.
+
 The polygon sim itself models plate kinematics, contention, fusion,
 rifting, accretion, hotspot volcanism, erosion, and connected-component
 culling as a per-tick pipeline. See `tectonic_sim/polygon_sim/` for the
 authoritative implementation; the worldgen side does not know or care
 about the per-tick order.
+
+**Continental collisions build asymmetric inland fold-belts on BOTH
+plates.** C-C contention distributes folded mass into two belts:
+
+- **Over-rider side** — wide, broad. Inland on the winner's
+  `−velocity` direction, ~120 km depth with 35 km decay. Tibet-plateau
+  analogue. Knobs: `folding_belt_depth_km`, `folding_belt_decay_km`.
+- **Loser side** — narrow, sharp. Inland on the loser's own
+  `−velocity` direction (= opposite, propagates the other way from the
+  suture), starting one cell into the loser's interior, ~50 km depth
+  with 15 km decay. Himalayan-foothill analogue. Knobs:
+  `folding_loser_side_ratio`, `folding_belt_loser_depth_km`,
+  `folding_belt_loser_decay_km`.
+
+Mass accounting per fold event: over-rider gains `folding_ratio · t`,
+loser gains `folding_loser_side_ratio · t`, mantle absorbs the rest.
+At triple junctions, each loser contributes independently into its
+own continent. Belt cells running off-plate or onto oceanic crust
+drop their mass (models belt running into ocean).
 
 **Boundary mode is torus-only.** Every spatial query inside
 `tectonic_sim` uses the toroidal shortest-path metric.

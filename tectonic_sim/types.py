@@ -174,6 +174,27 @@ class SimConfig:
     folding_ratio: float
     folding_displacement_km: float
     subduction_arc_uplift_km: float
+    # Continental-continental fold-and-thrust belt. Each tick, the
+    # contested-cell fold mass is distributed inland (opposite the
+    # over-rider's velocity) across a band of depth
+    # ``folding_belt_depth_km``, with weights decaying exponentially
+    # with e-folding scale ``folding_belt_decay_km``. Setting depth ≤
+    # cell size collapses the band to the legacy suture-only deposit.
+    folding_belt_depth_km: float
+    folding_belt_decay_km: float
+    # Loser-side fold belt — narrower, sharper inland deposit on the
+    # *down-going* plate's near-suture interior. Models the Himalayan
+    # foothill / Lesser-Himalaya pattern: slices of the underthrusting
+    # plate get scraped off and stacked along the suture on its own
+    # side. ``folding_loser_side_ratio`` is the fraction of the loser's
+    # cell thickness redeposited back onto the loser (in addition to
+    # ``folding_ratio`` going to the over-rider). Sum of the two ratios
+    # should be ≤ 1 to avoid creating mass; the remainder represents
+    # crust "subducted to mantle". Belt starts one cell into the loser's
+    # interior (the suture itself now belongs to the over-rider).
+    folding_loser_side_ratio: float
+    folding_belt_loser_depth_km: float
+    folding_belt_loser_decay_km: float
 
     # --- Velocity damping ---
     velocity_damping_strength: float

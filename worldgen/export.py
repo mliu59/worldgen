@@ -304,22 +304,21 @@ def _export_tectonic_sim_views(
 
 def _export_polygon_views(out_dir: Path, snap: dict) -> None:
     """Render the polygon-sim's full visualization set. Uses
-    tectonic_sim.polygon_sim renderers so output matches the prototype
-    exactly.
+    tectonic_sim.polygon_sim renderers so output matches the sim's own
+    perspective.
 
-    Sim runs on the larger ``sim_domain``; the rendered partition,
-    crust, thickness, and topography views are CROPPED to the
-    user-visible ``world_domain`` (matches the prototype's final PNGs).
-    polygons.png shows the FULL sim domain so plate-drift outside the
-    crop is still visible.
+    All views show the FULL sim domain (the larger torus on which the
+    simulation actually ran), including the buffer region outside the
+    worldgen world rectangle. This makes plate drift, hotspots, and
+    suture formation visible everywhere — not just inside the world
+    crop. Worldgen's own per-hex layers (``layers/*.png``) remain
+    world-sized because they're rendered from the hex grid directly.
     """
     from tectonic_sim.polygon_sim import (
         build_partition_image,
         build_crust_image,
         build_thickness_image,
         build_topography_image,
-        crop_grids,
-        crop_origin_cells,
         overlay_hotspots,
         render_polygons_png,
         save_drift_gif,
@@ -340,23 +339,11 @@ def _export_polygon_views(out_dir: Path, snap: dict) -> None:
     frames_topography = snap["frames_topography"]
     final_tick = sim_cfg.n_ticks
 
-    # Sim grid dims (full).
     gy, gx = owner.shape
-    # Crop to the world (visible) region, centred on the sim grid.
-    owner_c, crust_c, age_c, thick_c = crop_grids(
-        owner, crust, age, thick,
-        cell_km=cell_km,
-        crop_w_km=world_domain.width_km,
-        crop_h_km=world_domain.height_km,
-    )
-    cgy, cgx = owner_c.shape
-    # Top-left of the crop in sim-cell coords (for hotspot-overlay alignment).
-    crop_y0, crop_x0 = crop_origin_cells(
-        gy, gx, cell_km, world_domain.width_km, world_domain.height_km,
-    )
-
     cap = (
-        f"WORLDGEN POLYGON  sim {gx}×{gy}  crop {cgx}×{cgy}  "
+        f"WORLDGEN POLYGON  sim {gx}×{gy}  "
+        f"world {int(round(world_domain.width_km))}×"
+        f"{int(round(world_domain.height_km))} km  "
         f"cell={cell_km:.1f}km  plates={sum(1 for p in plates if p.alive)}  "
         f"hotspots={sum(1 for h in hotspots if h.is_active(final_tick))}"
         f"/{len(hotspots)}"
@@ -364,56 +351,53 @@ def _export_polygon_views(out_dir: Path, snap: dict) -> None:
     upscale = 6
 
     def _save_with_hotspots(img, path):
-        # Overlay hotspots using the sim-frame coordinates with crop
-        # offset applied — markers land at the right place on the
-        # cropped image.
+        # Hotspots position in the sim's mantle frame — no crop offset
+        # because the panels are the full sim grid.
         overlay_hotspots(
             img, hotspots, final_tick,
             cell_km=cell_km, gy=gy, gx=gx, upscale=upscale,
-            x0_cells=crop_x0, y0_cells=crop_y0,
+            x0_cells=0, y0_cells=0,
             only_active=False,
         )
         img.save(path)
 
-    # 1. partition.png — plate ownership + edges + plate-ID labels (CROPPED).
+    # 1. partition.png — plate ownership + edges + plate-ID labels.
     _save_with_hotspots(
-        build_partition_image(owner_c, cap, upscale=upscale),
+        build_partition_image(owner, cap, upscale=upscale),
         out_dir / "partition.png",
     )
-    # 2. crust.png — continental tan / oceanic blue (CROPPED).
-    max_age = float(age_c.max() or 1)
+    # 2. crust.png — continental tan / oceanic blue.
+    max_age = float(age.max() or 1)
     _save_with_hotspots(
         build_crust_image(
-            owner_c, crust_c, age_c, thick_c, max_age, cap, upscale=upscale,
+            owner, crust, age, thick, max_age, cap, upscale=upscale,
         ),
         out_dir / "crust.png",
     )
-    # 3. thickness.png — heatmap (CROPPED).
-    owned_c = owner_c != -1
-    mean_thick = float(thick_c[owned_c].mean()) if owned_c.any() else 0.0
+    # 3. thickness.png — heatmap.
+    owned = owner != -1
+    mean_thick = float(thick[owned].mean()) if owned.any() else 0.0
     thk_img = build_thickness_image(
-        owner_c, thick_c,
-        f"thickness  {cgx}×{cgy}  cell={cell_km:.1f}km  mean={mean_thick:.1f}km",
+        owner, thick,
+        f"thickness  {gx}×{gy}  cell={cell_km:.1f}km  mean={mean_thick:.1f}km",
         upscale=upscale,
     )
     overlay_hotspots(
         thk_img, hotspots, final_tick,
         cell_km=cell_km, gy=gy, gx=gx, upscale=upscale,
-        x0_cells=crop_x0, y0_cells=crop_y0, only_active=False,
+        x0_cells=0, y0_cells=0, only_active=False,
     )
     thk_img.save(out_dir / "thickness.png")
-    # 4. topography.png — elevation colormap (CROPPED).
+    # 4. topography.png — elevation colormap.
     _save_with_hotspots(
         build_topography_image(
-            owner_c, crust_c, age_c, thick_c, sim_cfg, cap, upscale=upscale,
+            owner, crust, age, thick, sim_cfg, cap, upscale=upscale,
         ),
         out_dir / "topography.png",
     )
-    # 5. polygons.png — alpha-complex outlines (FULL SIM, not cropped).
-    # Matches prototype: lets you see plates that have drifted out of
-    # the cropped view.
+    # 5. polygons.png — alpha-complex outlines (full sim).
     render_polygons_png(sim_domain, plates, out_dir / "polygons.png", cap)
-    # 6. drift.gif / 7. thickness.gif / 8. topography.gif (cropped by capture).
+    # 6. drift.gif / 7. thickness.gif / 8. topography.gif (full sim).
     if frames:
         save_drift_gif(frames, out_dir / "drift.gif", fps=10)
     if frames_thickness:

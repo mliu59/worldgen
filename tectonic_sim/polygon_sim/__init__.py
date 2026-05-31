@@ -31,7 +31,6 @@ from __future__ import annotations
 # polygon_sim; import the submodule directly if you need it.
 
 from tectonic_sim.polygon_sim.simulate import simulate_rigid_polygon
-from tectonic_sim.polygon_sim.topology import _crop_grids as crop_grids
 from tectonic_sim.polygon_sim.viz import (
     _build_partition_image as build_partition_image,
     _build_crust_image as build_crust_image,
@@ -40,7 +39,6 @@ from tectonic_sim.polygon_sim.viz import (
     _render_polygons as render_polygons_png,
     _save_drift_gif as save_drift_gif,
     _overlay_hotspots as overlay_hotspots,
-    _crop_origin_cells as crop_origin_cells,
 )
 
 
@@ -49,8 +47,6 @@ __all__ = [
     "build_partition_image",
     "build_thickness_image",
     "build_topography_image",
-    "crop_grids",
-    "crop_origin_cells",
     "overlay_hotspots",
     "render_polygons_png",
     "save_drift_gif",
